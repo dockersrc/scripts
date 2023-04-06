@@ -1,0 +1,7 @@
+
+:REPLACE_SERVER_PORT {
+  root * /data/htdocs/www
+  file_server
+  #reverse_proxy localhost:8080
+  php_fastcgi localhost:9000
+}

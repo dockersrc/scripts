@@ -1,0 +1,3 @@
+:REPLACE_SERVER_PORT {
+  reverse_proxy localhost:8080
+}

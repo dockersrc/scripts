@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+##@Version           :  202210141608-git
+# @@Author           :  Jason Hempstead
+# @@Contact          :  git-admin@casjaysdev.com
+# @@License          :  LICENSE.md
+# @@ReadME           :  buildx --help
+# @@Copyright        :  Copyright: (c) 2022 Jason Hempstead, Casjays Developments
+# @@Created          :  Friday, Oct 14, 2022 16:08 EDT
+# @@File             :  buildx
+# @@Description      :  Docker buildx wrapper
+# @@Changelog        :  New script
+# @@TODO             :  Refactor code
+# @@Other            :
+# @@Resource         :
+# @@Terminal App     :  no
+# @@sudo/root        :  no
+# @@Template         :  bash/system
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Set bash options
+[ -n "$DEBUG" ] && set -x
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Set functions
+__image_exists() { docker ps -a 2>&1 | grep -q "$1" || return 1; }
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+__buildx() {
+  local exitStatus=0 reg_tag="${1:-$TAG_NAME}" dir="${directory:-.}"
+  [ -n "$platforms" ] && build_platforms="--platform ${platforms/ /,}"
+  #[ -d "$PWD/.git" ] && git pull -q && echo "Updating git repo"
+  # Initialize
+  echo "Setting target platform to $platforms"
+  __image_exists "$qemu_imagename" || { echo "Initializing $qemu_imagename" && docker run -d --name "$qemu_imagename" --privileged multiarch/qemu-user-static --reset -p yes &>/dev/null; }                                                        #|| { echo "Failed to Initialize" && exit 1; }
+  __image_exists "$binfmt_imagename" || { echo "Initializing $binfmt_imagename" && docker run -d --name "$binfmt_imagename" --privileged tonistiigi/binfmt --install all &>/dev/null; }                                                            #|| { echo "Failed to Initialize" && exit 1; }
+  __image_exists "$buildername" || { echo "Setting the buildername to $buildername" && docker buildx create --driver docker-container --driver-opt network=host --driver-opt image=moby/buildkit:master --name "$buildername" --use &>/dev/null; } #|| { echo "Failed to Initialize" && exit 1; }
+  docker buildx use "$buildername" &>/dev/null                                                                                                                                                                                                     #|| { echo "Failed to Initialize" && exit 1; }
+  docker buildx inspect --bootstrap &>/dev/null                                                                                                                                                                                                    #|| { echo "Failed to Initialize" && exit 1; }
+
+  # Build
+  echo "Building $reg_tag"
+  eval docker buildx build --rm --pull \
+    --push --no-cache $build_platforms \
+    --progress auto --output=type=registry \
+    $reg_tag "$dir" || exitStatus=1
+  [ "$exitStatus" -eq 0 ] || echo "Failed to build $reg_tag"
+
+  # Cleanup
+  __image_exists "$buildername" && docker rm -f "$buildername" &>/dev/null
+  __image_exists "$qemu_imagename" && docker rm -f "$qemu_imagename" &>/dev/null
+  __image_exists "$binfmt_imagename" && docker rm -f "$binfmt_imagename" &>/dev/null
+  return $exitStatus
+}
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[ -f "/root/.docker/config.json" ] || { echo "/root/.docker/config.json Does not exist did you mount it?" && exit 1; }
+[ -d "/tmp/build" ] && cd "/tmp/build" || { echo "/tmp/build Does not exist did you mount your project?" && exit 1; }
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Set additional variables
+[ -f "$PWD/.env.sh" ] && . "$PWD/.env.sh"
+[ -f "$1" ] && docker_file="$1" && shift 1 || docker_file="${FILE:-}"
+[ -d "$1" ] && [ -f "$1/Dockerfile" ] && docker_file="$1/Dockerfile" && shift 1 || docker_file="${FILE:-}"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+TAG_NAME="${1:-$TAGS}"
+REGISTRY="${REGISTRY:-}"
+ORG="${ORG:-casjaysdevdocker}"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+exitCode=0
+buildername="mybuilder"
+qemu_imagename="buildx-qemu"
+binfmt_imagename="buildx-binfmt"
+platforms="${PLATFORMS:-linux/amd64,linux/arm64}"
+docker_files="$(find "/tmp/build" -name 'Dockerfile*' 2>/dev/null | sort -u | grep '^' || false)"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+export DOCKER_CLI_EXPERIMENTAL="enabled"
+echo "$TAG_NAME" | grep -q ':' || TAG_NAME="$TAG_NAME:latest"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[ -n "$docker_file" ] || [ -n "$docker_files" ] || { echo "USAGE: buildx [dir] [tagname]" && exit 1; }
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+clear
+if [ -z "$(pgrep -x dockerd)" ]; then
+  echo "Starting dockerd"
+  start-docker.sh &>/dev/null &
+  sleep 10
+fi
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Main application
+if [ -n "$docker_file" ]; then
+  [ -n "$TAG_NAME" ] || { echo "USAGE: buildx [dir] [tagname]" && exit 1; }
+  directory="$(dirname "$docker_file")"
+  [ -n "$REGISTRY" ] && tag_name="$REGISTRY/$TAG_NAME" || tag_name="$TAG_NAME"
+  tag_name="$(echo "$REGISTRY/$TAG_NAME" | tr '[:upper:]' '[:lower:]')"
+  cd "$directory" && __buildx "$tag_name" || exitCode+="$((exitCode + 1))"
+elif [ -n "$docker_files" ]; then
+  for file in $docker_files; do
+    directory="$(dirname "$file")"
+    image_name="$(echo $ORG/$(basename "$directory") | tr '[:upper:]' '[:lower:]')"
+    [ -n "$REGISTRY" ] && tag_name="$REGISTRY/$image_name:latest" || tag_name="$image_name:latest"
+    cd "$directory" && __buildx "$tag_name" || exitCode+="$((exitCode + 1))"
+  done
+else
+  echo "Can not find a Dockerfile in /tmp/build"
+  exitCode=10
+fi
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+exit $exitCode
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# end

@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+[ "$DEBUGGER" = "on" ] && echo "Enabling debugging" && set -o pipefail -x$DEBUGGER_OPTIONS || set -o pipefail
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+printf '%s\n' "# - - - Initializing act_runner - - - #"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+SERVICE_NAME="act_runner"
+SCRIPT_NAME="$(basename "$0" 2>/dev/null)"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+export PATH="/usr/local/etc/docker/bin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# run trap command on exit
+trap 'retVal=$?;[ "$SERVICE_IS_RUNNING" != "true" ] && [ -f "$SERVICE_PID_FILE" ] && rm -Rf "$SERVICE_PID_FILE";exit $retVal' SIGINT SIGTERM EXIT
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Default predefined variables
+exitCode=0                      # default exit code
+WORKDIR=""                      # set working directory
+DATA_DIR="/data"                # set data directory
+RUN_DIR="/run/init.d"           # set scripts pid dir
+ETC_DIR="/etc/act_runner"       # set etc directory
+CONF_DIR="/config/act_runner"   # set config directory
+LOG_DIR="/data/logs/act_runner" # set log directory
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# execute command variables
+SERVICE_UID="0"           # set the user id
+SERVICE_USER="root"       # execute command as another user
+EXEC_CMD_BIN="act_runner" # command to execute
+EXEC_CMD_ARGS="daemon "   # command arguments
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Additional variables
+GITEA_PORT="${GITEA_PORT:-$SERVICE_PORT}"
+RUNNER_AUTH_TOKEN="${RUNNER_AUTH_TOKEN:-}"
+GITEA_HOSTNAME="${GITEA_SERVER:-${DOMAINNAME:-$HOSTNAME}}"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# simple cd function
+__cd() { mkdir -p "$1" && builtin cd "$1" || exit 1; }
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# process check functions
+__pcheck() { [ -n "$(type -P pgrep 2>/dev/null)" ] && pgrep -x "$1" &>/dev/null && return 0 || return 10; }
+__pgrep() { __pcheck "${1:-EXEC_CMD_BIN}" || __ps aux 2>/dev/null | grep -Fw " ${1:-$EXEC_CMD_BIN}" | grep -qv ' grep' | grep '^' && return 0 || return 10; }
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# check if process is already running
+__proc_check() {
+  local cmd_bin="" cmd_name=""
+  cmd_bin="${1:-$EXEC_CMD_BIN}"
+  cmd_name="$(basename "$cmd_bin")"
+  if __pgrep "$cmd_bin" || __pgrep "$cmd_name"; then
+    SERVICE_IS_RUNNING="true"
+    touch "$SERVICE_PID_FILE"
+    echo "$cmd_name is already running"
+    return 0
+  else
+    return 1
+  fi
+}
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# create directories
+[ -d "$RUN_DIR" ] || mkdir -p "$RUN_DIR"
+[ -d "$LOG_DIR" ] || mkdir -p "$LOG_DIR"
+[ -d "$CONF_DIR" ] || mkdir -p "$CONF_DIR"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# create directories if variable is yes
+[ "$IS_WEB_SERVER" = "yes" ] && { [ -d "$WWW_DIR" ] || mkdir -p "$WWW_DIR"; }
+[ "$IS_DATABASE_SERVICE" = "yes" ] && mkdir -p "$DATABASE_DIR" && chmod -f 777 "$DATABASE_DIR"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# copy config files
+[ -d "$CONF_DIR" ] && cp -Rf "$CONF_DIR/." "$ETC_DIR/"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# custom commands
+if [ ! -f "$CONF_DIR/default.conf" ]; then
+  echo "# Settings for the default gitea runner" >"$CONF_DIR/default.conf"
+  echo "RUNNER_NAME=\"local\"" >>"$CONF_DIR/default.conf"
+  echo "RUNNER_LABELS=\"ubuntu-latest\"" >>"$CONF_DIR/default.conf"
+  echo "RUNNER_AUTH_TOKEN=\"${RUNNER_AUTH_TOKEN:-}\"" >>"$CONF_DIR/default.conf"
+  echo "GITEA_HOSTNAME=\"${GITEA_HOSTNAME:-}\"" >>"$CONF_DIR/default.conf"
+fi
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# fix permissions
+chmod -f 777 "$LOG_DIR" "$RUN_DIR"
+[ -d "$DATABASE_DIR" ] && chmod -f 777 "$DATABASE_DIR"
+if [ -n "$SERVICE_USER" ] && [ "$SERVICE_USER" != "root" ]; then
+  if grep -s -q "$SERVICE_USER:" "/etc/passwd"; then
+    chown -Rf $SERVICE_USER:$SERVICE_USER "$ETC_DIR" "$WWW_DIR" "$LOG_DIR" && echo "changed ownership to $SERVICE_USER"
+  fi
+fi
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Initialize runners
+for runner in "$CONF_DIR"/*.conf; do
+  runner_name="$(basename "$runner")"
+  runner_name="${runner_name//.conf/}"
+  RUNNER_LABELS="linux"
+  RUNNER_NAME="$runner_name"
+  GITEA_HOSTNAME="${GITEA_HOSTNAME:-$HOSTNAME}"
+  while :; do
+    [ -f "$RUN_DIR/act_runner.$RUNNER_NAME.pid" ] && break
+    if [ -z "$RUNNER_AUTH_TOKEN" ]; then
+      echo "Error: Can not start runner: RUNNER_AUTH_TOKEN is not set" >&2
+      echo "visit $GITEA_HOSTNAME:$GITEA_PORT/admin/runners" >&2
+      echo "And edit $runner" >&2
+    fi
+    [ -f "$runner" ] && . "$runner"
+    if [ -n "$RUNNER_AUTH_TOKEN" ]; then
+      echo "RUNNER_AUTH_TOKEN has been set"
+      (act_runner register --labels "$RUNNER_LABELS" --name "$RUNNER_NAME" --instance "http://$GITEA_HOSTNAME" --token "$RUNNER_AUTH_TOKEN" --no-interactive || return 1) &
+      [ $? -eq 0 ] && echo "$!" >"$RUN_DIR/act_runner.$RUNNER_NAME.pid"
+      break
+    else
+      sleep 120
+    fi
+  done
+done
+echo "$$" >"$RUN_DIR/act_runner.pid"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+exit $exitCode

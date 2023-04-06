@@ -1,0 +1,7 @@
+{
+    "ip": "127.0.0.1",
+    "iptables": true,
+    "log-level": "error" ,
+    "pidfile": "/tmp/docker.pid",
+    "insecure-registries": ["localhost:5000"]
+}

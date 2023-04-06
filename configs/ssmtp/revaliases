@@ -1,0 +1,2 @@
+# sSMTP aliases
+#root:your_login@your.domain:mailhub.your.domain[:port]

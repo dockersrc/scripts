@@ -1,0 +1,144 @@
+#https://docs.docker.com/registry/configuration/
+version: 0.1
+log:
+  formatter: text
+  fields:
+    service: registry
+################
+storage:
+  delete:
+    enabled: true
+  cache:
+    blobdescriptor: inmemory
+  filesystem:
+    rootdirectory: /data/registry
+################
+http:
+  addr: :5000
+  #prefix: /my/nested/registry/
+  #host: https://myregistryaddress.org:5000
+  #secret: asecretforlocaldevelopment
+  #relativeurls: false
+  #draintimeout: 60s
+  # tls:
+  #   certificate: /certs/certs/localhost.crt
+  #   key: /certs/private/localhost.key
+  # letsencrypt:
+  #   cachefile: /config/certs/cache
+  #   email: emailused@letsencrypt.com
+  #   hosts: [myregistryaddress.org]
+  headers:
+    X-Content-Type-Options: [nosniff]
+    Access-Control-Max-Age: [1728000]
+    Access-Control-Allow-Origin: ['*']
+      #Access-Control-Allow-Credentials: [true]
+      #Access-Control-Allow-Headers: ['Authorization', 'Accept']
+      #Access-Control-Expose-Headers: ['Docker-Content-Digest']
+      #Access-Control-Allow-Methods: ['HEAD', 'GET', 'OPTIONS', 'DELETE']
+  debug:
+    addr: :5001
+    prometheus:
+      enabled: true
+    path: /metrics
+  http2:
+    disabled: false
+################
+auth:
+  none:
+  # silly:
+  #   realm: silly-realm
+  #   service: silly-service
+  # token:
+  #   autoredirect: true
+  #   realm: token-realm
+  #   service: token-service
+  #   issuer: registry-token-issuer
+  #   rootcertbundle: /root/certs/bundle
+  # htpasswd:
+  #     realm: basic-realm
+  #     path: /config/auth/htpasswd
+################
+# middleware:
+#   registry:
+################
+# reporting:
+#   bugsnag:
+# apikey: bugsnagapikey
+# releasestage: bugsnagreleasestage
+# endpoint: bugsnagendpoint
+# newrelic:
+# licensekey: newreliclicensekey
+# name: newrelicname
+# verbose: true
+
+# notifications:
+#   events:
+#     includereferences: true
+#   endpoints:
+#     - name: alistener
+#       disabled: false
+#       url: https://my.listener.com/event
+#       headers: <http.Header>
+#       timeout: 1s
+#       threshold: 10
+#       backoff: 1s
+#       ignoredmediatypes:
+#         - application/octet-stream
+#       ignore:
+#         mediatypes:
+#           - application/octet-stream
+#         actions:
+#           - pull
+################
+redis:
+  addr: localhost:6379
+#   password: asecret
+#   db: 0
+#   dialtimeout: 10ms
+#   readtimeout: 10ms
+#   writetimeout: 10ms
+#   pool:
+#     maxidle: 16
+#     maxactive: 64
+#     idletimeout: 300s
+################
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3
+  file:
+    - file: /config/docker/registry.yaml
+      interval: 10s
+  # http:
+  #   - uri: http://server.to.check/must/return/200
+  #     headers:
+  #       Authorization: [Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==]
+  #     statuscode: 200
+  #     timeout: 3s
+  #     interval: 10s
+  #     threshold: 3
+  # tcp:
+  #   - addr: redis-server.domain.com:6379
+  #     timeout: 3s
+  #     interval: 10s
+  #     threshold: 3
+################
+# proxy:
+#   remoteurl: https://registry-1.docker.io
+#   username: [username]
+#   password: [password]
+################
+compatibility:
+  schema1:
+    # signingkeyfile: /etc/registry/key.json
+    enabled: true
+################
+# validation:
+#   manifests:
+#     urls:
+# allow:
+#   - ^https?://([^/]+\.)*example\.com/
+# deny:
+#   - ^https?://www\.example\.com/
+

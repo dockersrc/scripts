@@ -1,0 +1,19 @@
+# For configuration options and examples, please see:
+# https://gethomepage.dev/en/configs/widgets/
+---
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+
+- search:
+    focus: true
+    target: _blank
+    provider: duckduckgo
+    url: https://search.casjay.net/?q=
+
+- datetime:
+    format:
+      dateStyle: short
+      timeStyle: short
+      hour12: false

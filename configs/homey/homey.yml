@@ -1,0 +1,40 @@
+# Refer to README.md for configuration instructions
+title: homey # dashboard title
+minimal_mode: false # disable functionality; conserve resources
+show_house: true # disable 3D house in header
+compact_services: false # reduce service padding
+enable_service_status: true # toggle up/down indicators for services
+enable_notifications: true # toggle in-page notifications for selected events
+audio_notifications: false # toggle notification audio
+bookmarks_in_header: false # fill empty space in header with bookmarks
+docker_api_backend: docker # valid options: docker, portainer
+
+services:
+  - name: Portainer
+    icon: portainer.png
+    subtitle: Docker container management
+    url: https://192.168.1.XXX:9443
+  - name: Flood
+    icon: flood.png
+    subtitle: Web UI for rTorrent
+    url: http://192.168.1.XXX:<port>
+  - name: Router
+    icon: router.png
+    url: http://192.168.1.1
+
+cards:
+  - name: Torrents
+    enable: false
+  - name: Weather
+    enable: true
+  - name: System
+    enable: false
+  - name: Bookmarks
+    enable: true
+
+bookmarks:
+  - name: GitHub
+    url: https://github.com
+  - name: YTMND
+    url: https://ytmnd.com/
+    hover: lol internet

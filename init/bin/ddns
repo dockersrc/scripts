@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+##@Version           :  202303291250-git
+# @@Author           :  Jason Hempstead
+# @@Contact          :  git-admin@casjaysdev.com
+# @@License          :  WTFPL
+# @@ReadME           :  ddns --help
+# @@Copyright        :  Copyright: (c) 2023 Jason Hempstead, Casjays Developments
+# @@Created          :  Wednesday, Mar 29, 2023 12:50 EDT
+# @@File             :  ddns
+# @@Description      :  newScript
+# @@Changelog        :  newScript
+# @@TODO             :  Refactor code
+# @@Other            :
+# @@Resource         :
+# @@Terminal App     :  no
+# @@sudo/root        :  no
+# @@Template         :  bash/system
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+APPNAME="$(basename "$0")"
+VERSION="202303291250-git"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Set bash options
+set -o pipefail
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+__run_dns() { named-checkconf -z "/etc/named.conf" && named -c "/etc/named.conf" || return 1; }
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+SHORT_HOST="$(hostname -s)"
+DOMAIN_HOST="${DOMAIN_NAME:-$(hostname -f || echo 'test')}"
+NETDEV="$(ip route 2>/dev/null | grep default | sed -e "s/^.*dev.//" -e "s/.proto.*//" | awk '{print $1}')"
+IPV4_ADDR="$(ifconfig $NETDEV 2>/dev/null | grep -E "venet|inet" | grep -v "127.0.0." | grep 'inet' | grep -v inet6 | awk '{print $2}' | sed s/addr://g | head -n1 | grep '^' || echo '')"
+IPV6_ADDR="$(ifconfig "$NETDEV" 2>/dev/null | grep -E "venet|inet" | grep 'inet6' | grep -i global | awk '{print $2}' | head -n1 | grep '^' || echo '')"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+DATE="$(date +'%Y%m%d%M')"
+OLD_DATE="${OLD_DATE:-2018020901}"
+DOMAIN_NAME="${DOMAIN_NAME:-$FULL_HOST}"
+IPV4_ADDR_GATEWAY="$(ip route show default | awk '/default/ {print $3}' | head -n1 | grep '^' || echo '')"
+IPV4_ADDR="${IPV4_ADDR:-10.0.0.2}"
+IPV4_ADDR_SUBNET="${IPV4_ADDR_SUBNET:-10.0.0.0}"
+IPV4_ADDR_START="${IPV4_ADDR_START:-10.0.100.1}"
+IPV4_ADDR_END="${IPV4_ADDR_END:-10.0.100.254}"
+IPV4_ADDR_NETMASK="${IPV4_ADDR_NETMASK:-255.255.0.0}"
+IPV4_ADDR_GATEWAY="${IPV4_ADDR_GATEWAY:-10.0.0.1}"
+IPV6_ADDR="${IP6_ADDR:-2001:0db8:edfa:1234::2}"
+IPV6_ADDR_SUBNET="${IPV6_ADDR_SUBNET:-2001:0db8:edfa:1234::}"
+IPV6_ADDR_START="${IPV6_ADDR_START:-2001:0db8:edfa:1234:5678::1}"
+IPV6_ADDR_END="${IPV6_ADDR_END:-2001:0db8:edfa:1234:5678::ffff}"
+IPV6_ADDR_NETMASK="${IPV6_ADDR_NETMASK:-64}"
+IPV6_ADDR_GATEWAY="${IPV6_ADDR_GATEWAY:-2001:0db8:edfa:1234::1}"
+[ "$DOMAIN_NAME" == "local" ] && DOMAIN_NAME="test"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[ -f "/config/rndc.key" ] || rndc-confgen -a -c /etc/rndc.key &>>/data/logs/named.log
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+RNDC_KEY="$(cat "/etc/rndc.key" | grep 'secret' | awk '{print $2}' | sed 's|;||g;s|"||g')"
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[ -f "/config/rndc.key" ] || cp -Rf "/etc/rndc.key" "/config/rndc.key" &>>/data/logs/entrypoint.log
+[ -f "/config/rndc.conf" ] || { [ -f "/etc/rndc.conf" ] && cp -Rf "/etc/rndc.conf" "/config/rndc.conf" &>>/data/logs/entrypoint.log; }
+[ -d "/run/tor" ] || mkdir -p "/run/tor" &>>/data/logs/entrypoint.log
+[ -d "/etc/dhcp" ] || mkdir -p "/etc/dhcp" &>>/data/logs/entrypoint.log
+[ -d "/run/dhcp" ] || mkdir -p "/run/dhcp" &>>/data/logs/entrypoint.log
+[ -d "/var/tftpboot" ] && [ ! -d "/data/tftp" ] && mv -f "/var/tftpboot" "/data/tftp" &>>/data/logs/entrypoint.log
+[ -d "/var/lib/dhcp" ] || mkdir -p "/var/lib/dhcp" &>>/data/logs/entrypoint.log
+[ -d "/data/tor" ] || cp -Rf "/var/lib/tor" "/data/tor" &>>/data/logs/entrypoint.log
+[ -d "/data/htdocs/www" ] || cp -Rf "/var/lib/ddns/data/htdocs/www" "/data/htdocs/www" &>>/data/logs/entrypoint.log
+[ -d "/data/named" ] || cp -Rf "/var/lib/ddns/data/named" "/data/named" &>>/data/logs/entrypoint.log
+[ -d "/config/tor" ] || cp -Rf "/var/lib/ddns/config/tor" "/config/tor" &>>/data/logs/entrypoint.log
+[ -d "/config/dhcp" ] || cp -Rf "/var/lib/ddns/config/dhcp" "/config/dhcp" &>>/data/logs/entrypoint.log
+[ -d "/config/named" ] || cp -Rf "/var/lib/ddns/config/named" "/config/named" &>>/data/logs/entrypoint.log
+[ -f "/config/radvd.conf" ] || cp -Rf "/var/lib/ddns/config/radvd.conf" "/config/radvd.conf" &>>/data/logs/entrypoint.log
+[ -f "/config/named.conf" ] || cp -Rf "/var/lib/ddns/config/named.conf" "/config/named.conf" &>>/data/logs/entrypoint.log
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+find "/config" "/data" -type f -exec sed -i 's|'${OLD_DATE:-2018020901}'|'$DATE'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_DOMAIN|'$DOMAIN_NAME'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_WITH_RNDC_KEY|'$RNDC_KEY'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV4_ADDRESS|'$IPV4_ADDR'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV4_ADDR_START|'$IPV4_ADDR_START'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV4_ADDR_END|'$IPV4_ADDR_END'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV4_SUBNET|'$IPV4_ADDR_SUBNET'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV4_NETMASK|'$IPV4_ADDR_NETMASK'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV4_GATEWAY|'$IPV4_ADDR_GATEWAY'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV6_ADDRESS|'$IPV6_ADDR'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV6_ADDR_START|'$IPV6_ADDR_START'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV6_ADDR_END|'$IPV6_ADDR_END'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV6_SUBNET|'$IPV6_ADDR_SUBNET'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV6_NETMASK|'$IPV6_ADDR_NETMASK'|g' {} \;
+find "/config" "/data" -type f -exec sed -i 's|REPLACE_IPV6_GATEWAY|'$IPV6_ADDR_GATEWAY'|g' {} \;
+
+if [ -f "/config/named.conf" ]; then
+  echo "Initializing named" &>>/data/logs/entrypoint.log
+  rm -R /data/logs/dns/* &>>/data/logs/entrypoint.log
+  cp -Rf "/config/named.conf" "/etc/named.conf"
+  [ -d "/data/logs/dns" ] || mkdir -p "/data/logs/dns"
+  [ -d "/data/named" ] && cp -Rf "/data/named" "/var/named"
+  [ -d "/config/named" ] && cp -Rf "/config/named" "/etc/named"
+  [ -f "/config/rndc.key" ] && cp -Rf "/config/rndc.key" "/etc/rndc.key"
+  [ -f "/config/rndc.conf" ] && cp -Rf "/config/rndc.conf" "/etc/rndc.conf"
+  chmod -f 777 "/data/logs/dns"
+  __run_dns &>>/data/logs/named.log &
+  sleep .5
+fi
+
+if [ -n "$IP6_ADDR" ]; then
+  if [ -f "/config/dhcp/dhcpd6.conf" ]; then
+    echo "Initializing dhcpd6" &>>/data/logs/entrypoint.log
+    cp -Rf "/config/dhcp/dhcpd6.conf" "/etc/dhcp/dhcpd6.conf"
+    touch /var/lib/dhcp/dhcpd6.leases
+    dhcpd -6 -cf /etc/dhcp/dhcpd6.conf &>>/data/logs/dhcpd6.log &
+    sleep .5
+  fi
+  if [ -f "/config/radvd.conf" ]; then
+    echo "Initializing radvd" &>>/data/logs/entrypoint.log
+    cp -Rf "/config/radvd.conf" "/etc/radvd.conf"
+    radvd -C /etc/radvd.conf &>>/data/logs/radvd.log &
+    sleep .5
+  fi
+fi
+
+if [ -f "/config/dhcp/dhcpd4.conf" ]; then
+  echo "Initializing dhcpd4" &>>/data/logs/entrypoint.log
+  cp -Rf "/config/dhcp/dhcpd4.conf" "/etc/dhcp/dhcpd4.conf"
+  touch /var/lib/dhcp/dhcpd.leases
+  dhcpd -4 -cf /etc/dhcp/dhcpd4.conf &>>/data/logs/dhcpd4.log &
+  sleep .5
+fi
+
+if [ -d "/config/tor" ]; then
+  echo "Initializing tor" &>>/data/logs/entrypoint.log
+  [ -d "/config/tor" ] && cp -Rf "/config/tor" "/etc/tor"
+  chown -Rf root:root "/var/lib/tor"
+  chmod 700 "/run/tor"
+  tor -f "/etc/tor/torrc" &>>/data/logs/tor.log &
+fi
+if [ -d "/data/tftp" ]; then
+  echo "Initializing tftp" &>>/data/logs/entrypoint.log
+  rm -Rf "/var/tftpboot"
+  ln -sf "/data/tftp" "/var/tftpboot"
+  in.tftpd -vv -L "/var/tftpboot" &>/data/logs/tftpd.log &
+fi
+if [ -f "/data/htdocs/www/index.php" ]; then
+  echo "Initializing web on $IPV4_ADDR" &>>/data/logs/entrypoint.log
+  nginx -c "/etc/nginx/nginx.conf" &>>/data/logs/nginx.log &
+  sleep .5
+fi
+sleep 5
+date +'%Y-%m-%d %H:%M' >/data/logs/entrypoint.log
+echo "Initializing completed" &>>/data/logs/entrypoint.log
+tail -n 80 -f /data/logs/*.log
