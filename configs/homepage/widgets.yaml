@@ -10,7 +10,7 @@
     focus: true
     target: _blank
     provider: duckduckgo
-    url: https://search.casjay.net/?q=
+    url: https://search.casjay.pro/?q=
 
 - datetime:
     format:

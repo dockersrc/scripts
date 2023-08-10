@@ -5,7 +5,7 @@
   <!--
 ##@Version           :  202303091846-git
 # @@Author           :  Jason Hempstead
-# @@Contact          :  git-admin@casjaysdev.com
+# @@Contact          :  git-admin@casjaysdev.pro
 # @@License          :  WTFPL
 # @@ReadME           :  
 # @@Copyright        :  Copyright: (c) 2023 Jason Hempstead, Casjays Developments
@@ -93,7 +93,7 @@
             'This site uses cookie and in accordance with the EU GDPR<br />law this message is being displayed.<br />',
           dismiss: 'Dismiss',
           link: 'CasjaysDev Privacy Policy',
-          href: 'https://casjaysdev.com/policy',
+          href: 'https://casjaysdev.pro/policy',
         },
       });
     </script>
