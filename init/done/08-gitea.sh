@@ -50,33 +50,37 @@ DATABASE_DIR="${DATABASE_DIR_GITEA:-/data/db/gitea}"
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # port which service is listening on
-SERVICE_PORT=""
+SERVICE_PORT="80"
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # execute command variables
-SERVICE_UID="0"                                                             # set the user id
-SERVICE_USER="root"                                                         # execute command as another user
-EXEC_CMD_BIN="gitea"                                                        # command to execute
-EXEC_CMD_ARGS="--port $SERVICE_PORT --config $ETC_DIR/app.ini "             # command arguments
-EXEC_CMD_ARGS+="--custom-path $ETC_DIR/custom --work-path $DATA_DIR/gitea " # continued
+SERVICE_UID="0"                                                              # set the user id
+SERVICE_USER="root"                                                          # execute command as another user
+EXEC_CMD_BIN="gitea"                                                         # command to execute
+EXEC_CMD_ARGS="--port $SERVICE_PORT --config $ETC_DIR/app.ini "              # command arguments
+EXEC_CMD_ARGS+="--custom-path $CONF_DIR/custom --work-path $DATA_DIR/gitea " # continued
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Is this service a web server
-IS_WEB_SERVER="yes"
+IS_WEB_SERVER="no"
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Is this service a database server
-IS_DATABASE_SERVICE="no"
+IS_DATABASE_SERVICE="yes"
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Additional variables
 GITEA_USER="$SERVICE_USER"
 GITEA_TZ="${TZ:-America/New_York}"
 GITEA_PROTO="${GITEA_PROTO:-http}"
 GITEA_EMAIL_CONFIRM="${GITEA_EMAIL_CONFIRM:-false}"
+GITEA_MODE="${GITEA_MODE:-prod}"
 GITEA_DB_TYPE="${GITEA_DB_TYPE:-sqlite3}"
+GITEA_DATABASE_DIR="${GITEA_DATABASE_DIR:-$DATABASE_DIR}"
 GITEA_HOSTNAME="${DOMAINNAME:-$HOSTNAME}"
 GITEA_PORT="${GITEA_PORT:-$SERVICE_PORT}"
 GITEA_NAME="${GITEA_NAME:-Gitea - GIT Server}"
 GITEA_SQL_DB_HOST="${GITEA_SQL_DB_HOST:-localhost}"
 GITEA_ADMIN="${GITEA_ADMIN:-gitea@${DOMAINNAME:-$HOSTNAME}}"
 GITEA_EMAIL_RELAY="${GITEA_EMAIL_RELAY:-${EMAIL_RELAY:-localhost}}"
+GITEA_SECRET_KEY="${GITEA_SECRET_KEY:-$($EXEC_CMD_BIN generate secret SECRET_KEY)}"
+GITEA_OAUTH_JWT_SECRET="${GITEA_OAUTH_JWT_SECRET:-$($EXEC_CMD_BIN generate secret JWT_SECRET)}"
 GITEA_LFS_JWT_SECRET="${GITEA_LFS_JWT_SECRET:-$($EXEC_CMD_BIN generate secret LFS_JWT_SECRET)}"
 GITEA_INTERNAL_TOKEN="${GITEA_INTERNAL_TOKEN:-$($EXEC_CMD_BIN generate secret INTERNAL_TOKEN)}"
 [ "$GITEA_EMAIL_CONFIRM" = "yes" ] && GITEA_EMAIL_CONFIRM="true"
@@ -140,27 +144,34 @@ __update_conf_files() {
   # create directories if variable is yes"
   [ "$IS_WEB_SERVER" = "yes" ] && APPLICATION_DIRS="$APPLICATION_DIRS $WWW_DIR" && { [ -d "$WWW_DIR" ] || { (echo "Creating directory $WWW_DIR with permissions 777" && mkdir -p "$WWW_DIR" && chmod -f 777 "$WWW_DIR") |& tee -a "$LOG_DIR/init.txt" &>/dev/null; }; }
   [ "$IS_DATABASE_SERVICE" = "yes" ] && APPLICATION_DIRS="$APPLICATION_DIRS $DATABASE_DIR" && { [ -d "$DATABASE_DIR" ] || { (echo "Creating directory $DATABASE_DIR with permissions 777" && mkdir -p "$DATABASE_DIR" && chmod -f 777 "$DATABASE_DIR") |& tee -a "$LOG_DIR/init.txt" &>/dev/null; }; }
+  # replace variables
+  sed -i "s|REPLACE_GITEA_NAME|$GITEA_NAME|g" "$CONF_DIR/app.ini"
+  #
+  __replace "REPLACE_GITEA_LOG_DIR" "$LOG_DIR" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_TZ" "$GITEA_TZ" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_PORT" "$GITEA_PORT" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_USER" "$GITEA_USER" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_MODE" "$GITEA_MODE" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_PROTO" "$GITEA_PROTO" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_ADMIN" "$GITEA_ADMIN" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_SERVER" "$GITEA_SERVER" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_DATA_DIR" "$DATA_DIR/gitea" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_EMAIL_RELAY" "$GITEA_EMAIL_RELAY" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_EMAIL_CONFIRM" "$GITEA_EMAIL_CONFIRM" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_SECRET_KEY" "$GITEA_SECRET_KEY" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_INTERNAL_TOKEN" "$GITEA_INTERNAL_TOKEN" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_LFS_JWT_SECRET" "$GITEA_LFS_JWT_SECRET" "$CONF_DIR/app.ini"
+  __replace "REPLACE_GITEA_OAUTH_JWT_SECRET" "$GITEA_OAUTH_JWT_SECRET" "$CONF_DIR/app.ini"
+
+  # database settings
+  __replace "REPLACE_DB_TYPE" "$GITEA_DB_TYPE" "$CONF_DIR/app.ini"
+  [ -n "$GITEA_SQL_DB" ] && __replace "REPLACE_SQL_DB" "$GITEA_SQL_DB" "$CONF_DIR/app.ini"
+  [ -n "$GITEA_SQL_USER" ] && __replace "REPLACE_SQL_USER" "$GITEA_SQL_USER" "$CONF_DIR/app.ini"
+  [ -n "$GITEA_SQL_PASS" ] && __replace "REPLACE_SQL_PASS" "$GITEA_SQL_PASS" "$CONF_DIR/app.ini"
+  [ -n "$GITEA_SQL_DB_HOST" ] && __replace "REPLACE_SQL_HOST" "$GITEA_SQL_DB_HOST" "$CONF_DIR/app.ini"
+  [ "$GITEA_DB_TYPE" = "sqlite3" ] && __replace "REPLACE_DATABASE_DIR_GITEA" "$DATABASE_DIR" "$CONF_DIR/app.ini"
   # copy config files to system
   __file_copy "$CONF_DIR/." "$ETC_DIR/" |& tee -a "$LOG_DIR/init.txt" &>/dev/null
-  # replace variables
-  sed -i "s|REPLACE_GITEA_NAME|$GITEA_NAME|g" "$ETC_DIR/app.ini"
-  #
-  __replace "REPLACE_GITEA_TZ" "$GITEA_TZ" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_PORT" "$GITEA_PORT" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_USER" "$GITEA_USER" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_PROTO" "$GITEA_PROTO" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_ADMIN" "$GITEA_ADMIN" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_SERVER" "$GITEA_SERVER" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_EMAIL_RELAY" "$GITEA_EMAIL_RELAY" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_EMAIL_CONFIRM" "$GITEA_EMAIL_CONFIRM" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_INTERNAL_TOKEN" "$GITEA_INTERNAL_TOKEN" "$ETC_DIR/app.ini"
-  __replace "REPLACE_GITEA_LFS_JWT_SECRET" "$GITEA_LFS_JWT_SECRET" "$ETC_DIR/app.ini"
-  # database settings
-  __replace "REPLACE_DB_TYPE" "$GITEA_DB_TYPE" "$ETC_DIR/app.ini"
-  [ -n "$GITEA_SQL_DB" ] && __replace "REPLACE_SQL_DB" "$GITEA_SQL_DB" "$ETC_DIR/app.ini"
-  [ -n "$GITEA_SQL_USER" ] && __replace "REPLACE_SQL_USER" "$GITEA_SQL_USER" "$ETC_DIR/app.ini"
-  [ -n "$GITEA_SQL_PASS" ] && __replace "REPLACE_SQL_PASS" "$GITEA_SQL_PASS" "$ETC_DIR/app.ini"
-  [ -n "$GITEA_SQL_DB_HOST" ] && __replace "REPLACE_SQL_HOST" "$GITEA_SQL_DB_HOST" "$ETC_DIR/app.ini"
   # custom commands
 
   # other
